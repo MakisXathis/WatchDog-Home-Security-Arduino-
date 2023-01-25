@@ -6,7 +6,7 @@
 #include "Arduino_SensorKit.h"
 #include <Servo.h>
 #include <string.h>
-#define digital_pir_sensor 2
+#define digital_pir_sensor 5
 
 
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
@@ -21,11 +21,11 @@ int servo_position = 0;
 
 double accelerometer_x_prev,accelerometer_y_prev,accelerometer_z_prev = 10;
 
-IPAddress ip(192,168,1,10);
+IPAddress ip(192,168,161,195);
 WiFiServer server(8080);
 WiFiClient send_client;
 
-char server_ip[] = "192.168.1.8";
+char server_ip[] = "192.168.161.194";
 
 char edge_location = "kitchen";
 
@@ -65,7 +65,26 @@ void connectToWifi(char ssid[],char pass[]){                //Attempts WiFi conn
     delay(1000);
     digitalWrite(LED_BUILTIN, HIGH);
   }
+  _printWiFiStatus();
 }
+
+void _printWiFiStatus() {
+  // print the SSID of the network you're attached to:
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // print your board's IP address:
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
+
+  // print the received signal strength:
+  long rssi = WiFi.RSSI();
+  Serial.print("signal strength (RSSI):");
+  Serial.print(rssi);
+  Serial.println(" dBm");
+}
+
 //Reads accelerometer values if movement is detected sends notification to Master Node
 //and stores the current accelerometer values
 
@@ -86,9 +105,23 @@ void doorHandleHandler(){
 //millis are checked as well because sensor fires initially
 
 bool doorHandleMovement(double accelerometer_x_curr, double accelerometer_y_curr, double accelerometer_z_curr){
-  if ((fabs(accelerometer_x_prev-accelerometer_x_curr)>=0.12 && fabs(accelerometer_y_prev-accelerometer_y_curr)>=0.12) || (fabs(accelerometer_x_prev-accelerometer_x_curr)>=0.12 && fabs(accelerometer_z_prev-accelerometer_z_curr)>=0.12) || (fabs(accelerometer_z_prev-accelerometer_z_curr)>=0.12 && fabs(accelerometer_y_prev-accelerometer_y_curr)>=0.12) && int(millis()) > 8000){
+  if (((fabs(accelerometer_x_prev-accelerometer_x_curr)>=0.12 && fabs(accelerometer_y_prev-accelerometer_y_curr)>=0.12) || (fabs(accelerometer_x_prev-accelerometer_x_curr)>=0.12 && fabs(accelerometer_z_prev-accelerometer_z_curr)>=0.12) || (fabs(accelerometer_z_prev-accelerometer_z_curr)>=0.12 && fabs(accelerometer_y_prev-accelerometer_y_curr)>=0.12)) && accelerometer_y_prev!=0.00 && int(millis()) > 8000){
     Serial.print("Movement Detected");
     Serial.println("  ");
+
+    Serial.print("Current X:");
+    Serial.println(accelerometer_x_curr);
+    Serial.print("Previous X:");
+    Serial.println(accelerometer_x_prev);
+    Serial.print("Current Y:");
+    Serial.println(accelerometer_y_curr);
+    Serial.print("Previous Y:");
+    Serial.println(accelerometer_y_prev);
+    Serial.print("Current Z:");
+    Serial.println(accelerometer_z_curr);
+    Serial.print("Previous Z:");
+    Serial.println(accelerometer_z_prev);
+
     return true;
   }
   return false;
@@ -107,7 +140,7 @@ void motionDetectionHandler(){                                        //if it de
 void pressureHandler(){
   int current_pressure = pressure_sensor.getPressure();
 
-  if(abs(current_pressure - prev_pressure) > 7 && abs(current_pressure - prev_pressure) < 1000 && prev_pressure != 0){                 
+  if(abs(current_pressure - prev_pressure) > 8 && abs(current_pressure - prev_pressure) < 1000 && prev_pressure != 0){                 
     sendToMaster("GET /kitchen/pressure HTTP/1.1");
     previous_millis = millis();
   }
@@ -142,11 +175,12 @@ void setup() {
 
   //Start Server after Wifi connection has been established 
   server.begin();
-  
   if(!pressure_sensor.init()){
-    //Serial.println("Error initiating pressure sensor");
+    Serial.println("Error initiating pressure sensor");
   }
   Accelerometer.begin();
+
+  Serial.println("Setup Ended");
 }
 
 void loop() {
