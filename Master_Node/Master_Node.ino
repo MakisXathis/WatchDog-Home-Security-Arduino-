@@ -21,7 +21,6 @@ Things to note:
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 const char ssid[] = SECRET_SSID;        // your network SSID (name)
 const char pass[] = SECRET_PASS;        // your network password (use for WPA)
-IPAddress ip(192,168,1,8);
 
 const String gAcc   = SECRET_SEND_ACCOUNT,           // "something@somewhere.com"
              gPass  = SECRET_SEND_ACCOUNT_PASSWORD;  // "the_password"
@@ -32,32 +31,16 @@ const String recipient = "MNB1000@yahoo.gr";
 
 bool system_activation = true;                                            //If false the system cannot go in alarm state in case of sensor detection
 bool in_alarm = false;                                                    //In case of sensor detection goes to true
+bool kitchen_heartbit_email_flag = false;
 
 unsigned long kitchen_heartbit = 0;                                                       //used to detect if an Edge Node is offline
 bool kitchen_pressure = false, kitchen_accelerometer = false, kitchen_motion = false;     //stores the alarm state of the sensors from one Edge Device
 bool kitchen_locked=false;                                                                //stores the state of the Edge Node lock
 bool kitchen_lock_change=false;
-char kitchen_ip[] = "192.168.1.10";                                                       //stores the IP of the Edge Node in case we need to control its lock
+char kitchen_ip[] = "192.168.161.195";                                                       //stores the IP of the Edge Node in case we need to control its lock
 
 WiFiServer server(80);                                                                    //server to receive requests from the users
 
-void connectToWifi(char ssid[],char pass[]){                                              //Connects to the received ssid with the password provided
-  int status = WL_IDLE_STATUS;                                                            //In case of failure retries
-  WiFi.config(ip);
-  while (status != WL_CONNECTED){
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(ssid);
-    digitalWrite(LED_BUILTIN, LOW);
-    status = WiFi.begin(ssid, pass);
-    Serial.print("Status: ");
-    Serial.println(status);
-    delay(1000);
-    digitalWrite(LED_BUILTIN, HIGH);
-  }
-
-  Serial.print("Master Node IP: ");
-  Serial.print(WiFi.localIP());  
-}
 
 bool sendToEdge(char dest[],char message[]){                   //Sends a message to the Edge node received in order to control the lock (servo)
   WiFiClient client_tosend;
@@ -155,9 +138,6 @@ void SendEmail(char server[], int port, String sender,String password, String re
     sslclient.println("To: SomebodyElse <"+recipient+">");
 
     //// PLEASE UPDATE /////
-    const char outgoing[] = "This is a hello message from your friendly Arduino.\n";
-
-    //// PLEASE UPDATE /////
     // send from address, subject and message
     sslclient.println("From: Arduino <"+sender+">");
     sslclient.println("Subject: "+subject);
@@ -214,8 +194,8 @@ void systemShutdownOrStartUp(bool activate){         //Disables the system from 
 void activateAlarm(char message[], String subject){                                 //Activates the Buzzer and LED if system is in alarm and sends a notification email
   if (system_activation && in_alarm){
     digitalWrite(2,HIGH);
-    //tone(6,100);
-    //SendEmail(mailserver, port, gAcc, gPass, recipient, message, subject);
+    tone(6,200);
+    SendEmail(mailserver, port, gAcc, gPass, recipient, message, subject);
   }
 }
 
@@ -227,11 +207,13 @@ void setup() {
   pinMode(6,OUTPUT);
   while (!Serial); 
   //////////////////////  First Connect to WIFI /////////////////////////
-  connectToWifi(ssid,pass);
+  _connectToWifi(ssid,pass);
 
   //Start Server after Wifi connection has been established 
   server.begin();
   
+
+  Serial.println("Setup Ended");
   ///////////////////// then connect to server ///////////////////////////
   //SendEmail(mailserver, port, gAcc, gPass, recipient, "This is a message from your Friendly Arduino", "Good To Go!");
 }
@@ -278,6 +260,7 @@ void loop() {
             }else if (readString.indexOf("kitchen/heartbit") > 0){
               Serial.print("received heartbit from kitchen");
               kitchen_heartbit = millis();
+              kitchen_heartbit_email_flag = false;
             }else{
               if (currentLine.length() == 0) {
                 // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
@@ -296,8 +279,11 @@ void loop() {
                 }                 
             
                 client.print("<br>");
-
-                client.print("<h2>Kitchen Sensors</h2>");
+                if((millis() - kitchen_heartbit) > 660000){
+                  client.print("<h2 style=\"background-color:grey;\">Kitchen Sensors</h2>");
+                }else{
+                  client.print("<h2>Kitchen Sensors</h2>");
+                }
                 client.print("<table border='1'>");
                 client.print("<tr><th>Air Pressure</th>");
                 client.print("<th>Motion Sensor</th>");
@@ -384,8 +370,11 @@ void loop() {
   }
 
   if ((millis() - kitchen_heartbit) > 660000){
-    //SendEmail(mailserver, port, gAcc, gPass, recipient, "The kitchen Edge sensor has not sent any data for the past 10 minutes", "Kitchen Edge Offline");
+    if(!kitchen_heartbit_email_flag){
+      SendEmail(mailserver, port, gAcc, gPass, recipient, "The kitchen Edge sensor has not sent any data for the past 10 minutes", "Kitchen Edge Offline");
+      kitchen_heartbit_email_flag=true;
+    }
   }
 
-  delay(1000);
+  delay(200);
 }
